@@ -1,0 +1,22 @@
+# Antimalarial resistance gene panel.
+# NOTE: PlasmoDB gene IDs below are the canonical resistance loci. The exact 15-gene
+# composition of the published PfMDR15 panel must be confirmed against the Supplementary
+# Table of Khilari et al., Open Forum Infect Dis 2026;13(3):ofag106 before claiming
+# equivalence with that study. Verify every ID against PlasmoDB release >= 52.
+gene_symbol	plasmodb_id	drug_association	validated_markers_exist
+pfcrt	PF3D7_0709000	chloroquine, piperaquine	yes
+pfmdr1	PF3D7_0523000	lumefantrine, mefloquine, amodiaquine	yes
+pfdhfr	PF3D7_0417200	pyrimethamine	yes
+pfdhps	PF3D7_0810800	sulfadoxine	yes
+pfk13	PF3D7_1343700	artemisinin	yes
+pfaat1	PF3D7_0629500	chloroquine, lumefantrine	candidate
+pfmdr2	PF3D7_1447900	multidrug efflux	candidate
+pfmrp1	PF3D7_0112200	multidrug efflux	candidate
+pfubp1	PF3D7_0104300	artemisinin (background)	candidate
+pfap2mu	PF3D7_1218700	artemisinin (background)	candidate
+pfcoronin	PF3D7_1251200	artemisinin (in vitro)	candidate
+pfarps10	PF3D7_1460900	artemisinin (genetic background)	background
+pffd	PF3D7_1318100	artemisinin (genetic background)	background
+pfexo	PF3D7_1362500	piperaquine	candidate
+pfpm2	PF3D7_1408000	piperaquine (copy number)	yes
+pfpm3	PF3D7_1408100	piperaquine (copy number)	yes

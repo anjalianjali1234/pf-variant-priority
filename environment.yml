@@ -1,0 +1,20 @@
+name: pf-vp
+channels: [conda-forge, bioconda]
+dependencies:
+  - python=3.11
+  - minimap2=2.26
+  - samtools=1.19
+  - bcftools=1.19
+  - clair3=1.0.10
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - pyyaml
+  - biopython
+  - pip
+  - pip:
+      - torch>=2.1
+      - transformers>=4.38
+      - malariagen_data

@@ -1,0 +1,39 @@
+# Prioritisation weights for ranking variants of unknown significance.
+#
+# These weights are SET BY HAND, not learned. There is no labelled set of Indian VUS to
+# learn them from, and inventing one would be worse than being explicit. Change them,
+# re-run, and see how the ranking moves — sensitivity to these choices is reported by
+# prioritise.py as a rank-stability column.
+
+model:
+  # ESM-2 checkpoint. t12_35M is laptop-friendly; t33_650M is the usual choice on a GPU.
+  checkpoint: facebook/esm2_t33_650M_UR50D
+  batch_size: 8
+  mask_low_complexity: true
+  # A window is called low-complexity if one residue occupies more than this fraction.
+  lcr_window: 20
+  lcr_threshold: 0.6
+
+weights:
+  # Evolutionary constraint from the language model (higher = more constrained = ranked up).
+  constraint: 0.50
+  # Allele frequency in the sampled population. Rare variants are not necessarily
+  # unimportant, so this is weighted modestly.
+  frequency: 0.15
+  # Geographic spread: seen at many sites is harder to explain as drift or sampling noise.
+  spread: 0.20
+  # Temporal trend: frequency rising across collection years. Requires >= 2 years of data;
+  # contributes 0 where dates are missing.
+  trend: 0.15
+
+filters:
+  # Drop variants seen in fewer than this many samples before ranking.
+  min_samples: 2
+  # Exclude variants already WHO-validated — they need no prioritising.
+  exclude_validated: true
+  # Report but do not rank variants inside low-complexity regions.
+  separate_lcr: true
+
+bootstrap:
+  n_iterations: 1000
+  seed: 42

@@ -1,0 +1,31 @@
+# kelch13 (PF3D7_1343700) markers of artemisinin partial resistance.
+# Status per WHO "Report on antimalarial drug efficacy, resistance and response".
+# VERIFY against the most recent WHO report before use; the list is updated periodically.
+# Used in this workflow ONLY as held-out positive controls for score calibration.
+gene	aa_ref	aa_pos	aa_alt	status
+pfk13	F	446	I	validated
+pfk13	N	458	Y	validated
+pfk13	C	469	Y	validated
+pfk13	M	476	I	validated
+pfk13	Y	493	H	validated
+pfk13	R	539	T	validated
+pfk13	I	543	T	validated
+pfk13	P	553	L	validated
+pfk13	R	561	H	validated
+pfk13	P	574	L	validated
+pfk13	C	580	Y	validated
+pfk13	R	622	I	validated
+pfk13	A	675	V	validated
+pfk13	P	441	L	candidate
+pfk13	G	449	A	candidate
+pfk13	C	469	F	candidate
+pfk13	A	481	V	candidate
+pfk13	R	515	K	candidate
+pfk13	P	527	H	candidate
+pfk13	N	537	I	candidate
+pfk13	N	537	D	candidate
+pfk13	G	538	V	candidate
+pfk13	V	568	G	candidate
+pfk13	P	667	T	candidate
+pfk13	F	673	I	candidate
+pfk13	H	719	N	candidate

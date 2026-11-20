@@ -1,0 +1,9 @@
+results/
+work/
+.nextflow*
+__pycache__/
+*.pyc
+data/panel_proteins.faa
+data/ref/
+data/fastq/
+.ipynb_checkpoints/
