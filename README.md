@@ -26,10 +26,15 @@ significance* (VUS), and today they are triaged by hand against the literature. 
 widen and sample numbers grow, manual triage does not scale, and genuinely novel resistance
 alleles can sit unremarked in a results table for years.
 
-**This workflow adds a prioritisation layer.** It does not claim to predict resistance
-phenotype. It produces a defensible, reproducible ordering over VUS, so that limited
-follow-up effort (*in vitro* assays, phenotyping, targeted resequencing) goes to the
-variants most likely to matter.
+**This workflow adds a prioritisation layer, and a calibration step that decides whether
+that layer is trustworthy.** It does not claim to predict resistance phenotype. It
+produces a reproducible ordering over VUS *and* measures, against known markers, whether
+the ordering carries any signal before anyone acts on it.
+
+On the first real run that calibration step returned a verdict of **no signal** for
+unsupervised constraint scoring (AUC 0.524, see Results below). That negative result is
+reported here in full, because a prioritisation tool that cannot say when it is not
+working is worse than no tool at all.
 
 ## Approach
 
@@ -126,6 +131,76 @@ single GPU in under an hour with the 650M checkpoint.
 > `data/example_variant_table.tsv` in this repo is a **small synthetic file for smoke-testing
 > the code path only**. It is clearly labelled as such and must not be used to draw any
 > biological conclusion.
+
+---
+
+## Result from the first real run (20 Nov 2026)
+
+Scored every possible missense substitution across the kelch13 propeller domain
+(positions 350–726) with ESM-2 650M on a T4 GPU. Sequence retrieved from UniProt
+(`A0A077LQB4_PLAFA`, Kelch protein, *P. falciparum*); all 13 WHO-validated markers matched
+the reference residue, confirming the right isoform.
+
+```
+substitutions scored : 7163
+positives (validated): 13
+negatives            : 7137   (WHO candidates excluded)
+ROC-AUC              : 0.524   95% CI 0.383 – 0.664
+median rank of validated markers: 2662 of 7163
+```
+
+| Marker | ESM score | Rank | Percentile |
+|---|---|---|---|
+| R622I | −8.913 | 683 / 7163 | top 9.5% |
+| C580Y | −6.354 | 1542 | top 21.5% |
+| I543T | −5.815 | 1749 | top 24.4% |
+| N458Y | −5.451 | 1905 | top 26.6% |
+| Y493H | −4.507 | 2412 | top 33.7% |
+| P574L | −4.491 | 2428 | top 33.9% |
+| P553L | −4.131 | 2662 | top 37.2% |
+| M476I | −2.756 | 3690 | top 51.5% |
+| F446I | −1.768 | 4584 | top 64.0% |
+| R561H | −1.158 | 5151 | top 71.9% |
+| C469Y | −0.767 | 5509 | top 76.9% |
+| R539T | −0.382 | 5844 | top 81.6% |
+| A675V | −0.062 | 6131 | top 85.6% |
+
+### What this means
+
+**The constraint score does not recover WHO-validated artemisinin resistance markers.**
+AUC 0.524 with a confidence interval spanning 0.5 is indistinguishable from chance. Per the
+calibration rule stated above, the prioritised watchlist built on this score alone is
+**not usable for triage**, and this README reports that rather than burying it.
+
+This is not a bug, and on reflection it is the biologically expected answer. It is the
+caveat in the limitations section, confirmed by measurement:
+
+> A highly constrained position may be essential for parasite viability and therefore
+> *less* likely to be a resistance allele.
+
+Resistance mutations are, by definition, substitutions the parasite **tolerates** — they
+arise, survive and spread under drug pressure. They sit under *positive* selection, not
+purifying selection. An unsupervised model of evolutionary constraint measures the
+opposite quantity. The markers scatter across the whole distribution (R622I in the top
+10%, A675V in the bottom 15%), which is what that mismatch looks like.
+
+### What would be needed instead
+
+1. **Signatures of positive selection** from population data — iHS, XP-EHH, Tajima's D at
+   the variant's locus in MalariaGEN Pf7/Pf8. Resistance alleles should show recent
+   selective sweeps; that is a signal pointing the right way.
+2. **Structural context** — AlphaFold3 models of the panel proteins, with proximity to
+   drug-binding or substrate pockets as a feature. For kelch13, position within the
+   propeller and the BTB/POZ interface.
+3. **Supervised learning on phenotype**, once *in vitro* IC50 or ring-stage survival assay
+   data are linked. The constraint score then becomes one weak feature among several
+   rather than the whole model.
+4. **A tolerance score rather than a constraint score** — asking "is this substitution
+   compatible with viability?" instead of "is it unusual?" is closer to the right question.
+
+The pipeline, the calibration harness and the reporting are unchanged by this; only the
+input score needs replacing. That is the point of keeping calibration as a separate,
+mandatory step.
 
 ---
 
