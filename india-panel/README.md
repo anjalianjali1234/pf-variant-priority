@@ -52,6 +52,98 @@ would be circular, and a reviewer would say so immediately.
    curve. A gap at small panel sizes is the finding.
 4. **Regional breakdown.** Marker frequencies by country across South Asia.
 
+---
+
+## Results — MalariaGEN Pf7, run 23 Nov 2026
+
+**Scope.** 16,203 QC-pass samples with metadata, marker genotypes and resistance
+classifications. **India: n = 300.** 15 marker columns, 13 resistance labels. India is
+modestly sampled in Pf7 (Bangladesh 1,310; Myanmar 985), and every claim below is bounded
+by that 300.
+
+### The India-selected panel beats the globally-selected one on Indian parasites
+
+Mean balanced accuracy across the 13 resistance classifications, both panels scored on
+Indian samples:
+
+| markers | selected on India | selected globally | difference |
+|---|---|---|---|
+| 1 | 0.6310 | 0.6310 | 0.0000 |
+| 2 | 0.7465 | 0.7285 | +0.0180 |
+| 3 | 0.7921 | 0.7725 | +0.0196 |
+| 4 | 0.8369 | 0.8040 | +0.0329 |
+| 5 | 0.8684 | 0.8523 | +0.0161 |
+| 6 | 0.9007 | 0.8383 | +0.0624 |
+| **7** | **0.9338** | **0.8540** | **+0.0798** |
+| 8 | 0.9370 | 0.9180 | +0.0190 |
+| 9 | 0.9375 | 0.9304 | +0.0071 |
+| 10 | 0.9378 | 0.9284 | +0.0094 |
+
+**Bootstrap at k = 7** (200 resamples of the Indian samples): mean difference **+0.0410,
+95% CI +0.0225 to +0.0609, and 100% of resamples favour the India-selected panel.**
+
+The interval excludes zero, so the gap is not noise. Note the bootstrap mean (+0.041) is
+about half the single-run point estimate (+0.080) — the point estimate is optimistic, and
+the bootstrap is the number to quote.
+
+### The two panels
+
+| rank | selected on India | selected globally |
+|---|---|---|
+| 1 | pm2_dup_call | pm2_dup_call |
+| 2 | **dhps_437[G]** | dhfr_51[N] |
+| 3 | mdr1_dup_call | crt_76[K] |
+| 4 | **dhfr_108[S]** | mdr1_dup_call |
+| 5 | crt_76[K] | dhps_437[G] |
+| 6 | kelch13_349-726_ns_changes | **dhps_540[K]** |
+| 7 | dhfr_51[N] | **dhfr_59[C]** |
+
+Same universe of markers, different ordering. India pulls the SP markers *dhps_437* and
+*dhfr_108* forward; the global ordering spends slots 6 and 7 on *dhps_540* and *dhfr_59*,
+which buys less in Indian parasites.
+
+### Which markers carry information in India
+
+Shannon entropy over called genotypes, India versus global:
+
+| marker | India | global | reading |
+|---|---|---|---|
+| dhfr_108[S] | 1.298 | 0.635 | **twice as informative in India** |
+| dhfr_59[C] | 1.306 | 0.822 | more informative in India |
+| crt_76[K] | 1.400 | 1.299 | slightly more |
+| dhps_437[G] | 1.126 | 1.029 | slightly more |
+| dhps_540[K] | 1.010 | 1.598 | **less informative in India** |
+| dhfr_51[N] | 0.825 | 1.191 | less informative in India |
+| dhfr_164[I] | 0.123 | 0.891 | **near-invariant in India** (98.7% wild type) |
+| dhps_613[A] | 0.000 | 0.414 | **monomorphic in India** (299/299 calls `A`) |
+
+The *dhfr_108* and *dhfr_59* contrast is the clearest signal and matches the known Indian
+SP-resistance picture. *dhfr_164* and *dhps_613* carry essentially nothing for
+distinguishing Indian parasites.
+
+### A correction to the framing
+
+Before running this, the project argued that *kelch13* would be uninformative in India.
+**The data does not support that as stated.** The `kelch13_349-726_ns_changes` column has
+*higher* entropy in Indian samples (3.459) than globally (3.160), and the India-selected
+panel includes it at rank 6.
+
+That column lists every non-synonymous change found in the propeller domain, so its
+entropy reflects the diversity of all such strings, not the frequency of WHO-validated
+resistance markers. The literature point — that validated *kelch13* markers are rare in
+India — concerns a different quantity and is not tested here. Either measure it directly
+or drop the claim. It is not evidence either way as it stands.
+
+### A bug this run exposed
+
+`pm2_breakpoint` was initially flagged as monomorphic in India. It has **exactly one**
+Indian call. "Invariant" there is an artefact of missingness, not a fact about Indian
+parasites. The code now requires at least 50 calls before calling a marker monomorphic
+and reports a `too_few_calls` flag separately. *dhps_613[A]*, with 299 calls, survives
+that check and is a real finding.
+
+---
+
 ## Validation
 
 `test_synthetic.py` builds data with a known answer: 20 markers where Indian resistance

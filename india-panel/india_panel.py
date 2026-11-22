@@ -51,46 +51,26 @@ SOUTH_ASIA = ["India", "Bangladesh", "Myanmar", "Nepal", "Sri Lanka", "Pakistan"
 
 # ---------------------------------------------------------------- data loading
 
-def load_release(prefer: str = "Pf8"):
-    """Return (sample_metadata, release_name).
-
-    Tries the preferred release then the other. Column names differ between releases,
-    so everything downstream detects columns rather than hard-coding them.
-    """
-    import malariagen_data
-
-    for name in ([prefer] + [r for r in ("Pf8", "Pf7") if r != prefer]):
-        try:
-            rel = getattr(malariagen_data, name)()
-            meta = rel.sample_metadata()
-            print(f"[data] loaded {name}: {meta.shape[0]} samples, {meta.shape[1]} columns")
-            return meta, name
-        except Exception as exc:
-            print(f"[data] {name} unavailable: {exc}", file=sys.stderr)
-    sys.exit("could not load any MalariaGEN release")
-
-
-DR_URLS = {
-    "Pf7": {
-        "class": "https://www.malariagen.net/wp-content/uploads/2023/11/Pf7_inferred_resistance_status_classification.txt",
-        "geno": "https://www.malariagen.net/wp-content/uploads/2023/11/Pf7_drug_resistance_marker_genotypes.txt",
-    },
+PF7_BASE = "https://www.malariagen.net/wp-content/uploads/2023/11/"
+PF7_FILES = {
+    "meta": PF7_BASE + "Pf7_samples.txt",
+    "class": PF7_BASE + "Pf7_inferred_resistance_status_classification.txt",
+    "geno": PF7_BASE + "Pf7_drug_resistance_marker_genotypes.txt",
 }
 
 
-def load_dr_tables(release: str, class_url: str | None, geno_url: str | None):
-    urls = DR_URLS.get(release, {})
-    cu = class_url or urls.get("class")
-    gu = geno_url or urls.get("geno")
-    if not cu or not gu:
-        sys.exit(
-            f"No built-in resistance-table URLs for {release}. Pass --class-url and "
-            "--geno-url. Find them in the release README on malariagen.net."
-        )
-    cls = pd.read_csv(cu, sep="\t")
-    gen = pd.read_csv(gu, sep="\t")
-    print(f"[data] classifications {cls.shape}, marker genotypes {gen.shape}")
-    return cls, gen
+def load_tables(meta_url: str, class_url: str, geno_url: str):
+    """Load the three Pf7 tables over plain HTTPS.
+
+    Deliberately avoids the malariagen_data package: that routes through Google Cloud
+    and prompts for Drive/Cloud credentials in Colab. These three files are public
+    downloads and need no authentication at all.
+    """
+    meta = pd.read_csv(meta_url, sep="\t")
+    cls = pd.read_csv(class_url, sep="\t")
+    gen = pd.read_csv(geno_url, sep="\t")
+    print(f"[data] metadata {meta.shape}, classifications {cls.shape}, genotypes {gen.shape}")
+    return meta, cls, gen
 
 
 def find_id_column(df: pd.DataFrame) -> str:
@@ -126,7 +106,11 @@ def shannon_entropy(series: pd.Series) -> float:
     return float(-(p * np.log2(p)).sum())
 
 
-def marker_table(gen: pd.DataFrame, marker_cols: list[str], label: str) -> pd.DataFrame:
+MIN_CALLED_FOR_MONOMORPHIC = 50
+
+
+def marker_table(gen: pd.DataFrame, marker_cols: list[str], label: str,
+                 min_called: int = MIN_CALLED_FOR_MONOMORPHIC) -> pd.DataFrame:
     rows = []
     for c in marker_cols:
         v = gen[c].dropna()
@@ -139,18 +123,34 @@ def marker_table(gen: pd.DataFrame, marker_cols: list[str], label: str) -> pd.Da
             f"{label}_major_allele": counts.index[0] if len(counts) else None,
             f"{label}_major_freq": round(float(counts.iloc[0]), 4) if len(counts) else None,
             f"{label}_entropy_bits": round(shannon_entropy(gen[c]), 4),
-            f"{label}_monomorphic": bool(v.nunique() <= 1),
+            # A marker is only called monomorphic on enough calls to mean it. Pf7's
+            # pm2_breakpoint has exactly 1 Indian call: "invariant" there is an artefact
+            # of missingness, not a fact about Indian parasites.
+            f"{label}_monomorphic": bool(v.nunique() <= 1 and len(v) >= min_called),
+            f"{label}_too_few_calls": bool(len(v) < min_called),
         })
     return pd.DataFrame(rows)
 
 
 # ------------------------------------------------------------- panel selection
 
-def encode(gen: pd.DataFrame, marker_cols: list[str]) -> pd.DataFrame:
-    """Ordinal-encode each marker column. Missing becomes its own category."""
+def encode(gen: pd.DataFrame, marker_cols: list[str], max_categories: int = 20) -> pd.DataFrame:
+    """Ordinal-encode each marker column. Missing becomes its own category.
+
+    Columns with more than `max_categories` distinct values are collapsed to a binary
+    "differs from the most common value" indicator. This matters for
+    kelch13_349-726_ns_changes, which lists every non-synonymous change found and so has
+    many distinct strings. Left raw, a tree could memorise individual haplotypes;
+    collapsed, it asks what the classification rule actually asks - is there any
+    non-reference change in the propeller domain?
+    """
     out = {}
     for c in marker_cols:
-        out[c] = gen[c].astype(str).fillna("NA").astype("category").cat.codes
+        v = gen[c].astype(str).fillna("NA")
+        if v.nunique() > max_categories:
+            out[c] = (v != v.mode()[0]).astype(int)
+        else:
+            out[c] = v.astype("category").cat.codes
     return pd.DataFrame(out, index=gen.index)
 
 
@@ -200,6 +200,31 @@ def greedy_panel(X: pd.DataFrame, Y: pd.DataFrame, max_k: int, cv: int, seed: in
 
 # --------------------------------------------------------------------- reporting
 
+def bootstrap_delta(Xi, Yi, panel_a: list[str], panel_b: list[str], n_iter: int,
+                    cv: int, seed: int) -> dict:
+    """Resample Indian samples and recompute the accuracy gap between two panels.
+
+    The single cross-validated difference is a point estimate on 300 samples. Without an
+    interval there is no way to tell a real gap from noise, so the headline claim rests
+    on this, not on the point estimate.
+    """
+    rng = np.random.default_rng(seed)
+    deltas = []
+    for _ in range(n_iter):
+        q = rng.integers(0, len(Xi), len(Xi))
+        Xb, Yb = Xi.iloc[q], Yi.iloc[q]
+        deltas.append(score_subset(Xb, Yb, panel_a, cv, seed)
+                      - score_subset(Xb, Yb, panel_b, cv, seed))
+    d = np.array(deltas)
+    return {
+        "n_iterations": int(n_iter),
+        "mean_delta": round(float(d.mean()), 4),
+        "ci95": [round(float(np.percentile(d, 2.5)), 4),
+                 round(float(np.percentile(d, 97.5)), 4)],
+        "fraction_favouring_country_panel": round(float((d > 0).mean()), 3),
+    }
+
+
 def plot_curve(curves: dict[str, list[float]], out: Path, n_india: int) -> None:
     try:
         import matplotlib
@@ -225,19 +250,19 @@ def plot_curve(curves: dict[str, list[float]], out: Path, n_india: int) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--release", default="Pf7",
-                   help="Pf7 (built-in resistance-table URLs) or Pf8 (pass --class-url/--geno-url)")
-    p.add_argument("--class-url", default=None)
-    p.add_argument("--geno-url", default=None)
+    p.add_argument("--meta-url", default=PF7_FILES["meta"])
+    p.add_argument("--class-url", default=PF7_FILES["class"])
+    p.add_argument("--geno-url", default=PF7_FILES["geno"])
     p.add_argument("--country", default="India")
     p.add_argument("--max-markers", type=int, default=12)
     p.add_argument("--cv", type=int, default=5)
+    p.add_argument("--n-bootstrap", type=int, default=200)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", type=Path, default=Path("results_india"))
     args = p.parse_args()
 
-    meta, release = load_release(args.release)
-    cls, gen = load_dr_tables(release, args.class_url, args.geno_url)
+    meta, cls, gen = load_tables(args.meta_url, args.class_url, args.geno_url)
+    release = "Pf7"
 
     mid, cid, gid = (find_id_column(meta), find_id_column(cls), find_id_column(gen))
     qc = find_qc_column(meta)
@@ -320,8 +345,17 @@ def main() -> None:
             reg.append(t)
         pd.concat(reg).to_csv(args.out / "regional_heterogeneity.tsv", sep="\t", index=False)
 
+    k = min(7, len(panel_india), len(panel_global))
+    boot = bootstrap_delta(Xi, Yi, [m for m, _ in panel_india[:k]],
+                           [m for m, _ in panel_global[:k]],
+                           args.n_bootstrap, args.cv, args.seed)
+    print(f"\n[bootstrap] delta at k={k}: mean {boot['mean_delta']:+.4f}, "
+          f"95% CI {boot['ci95'][0]:+.4f} to {boot['ci95'][1]:+.4f}, "
+          f"{100 * boot['fraction_favouring_country_panel']:.1f}% favour {args.country}")
+
     summary = {
         "release": release,
+        "bootstrap_delta_at_k": {"k": k, **boot},
         "country": args.country,
         "n_samples_country": n_india,
         "n_samples_total": int(len(shared)),
