@@ -269,4 +269,8 @@ Built as an independent methods exercise. Method and motivation follow:
 - Lin Z, *et al.* Evolutionary-scale prediction of atomic-level protein structure with a
   language model. *Science.* 2023;379:1123–1130.
 
-Author: Anjali Chaudhary · MIT licence
+Author: Anjali Chaudhary
+
+## Copyright
+
+Copyright (c) 2026 Anjali Chaudhary. All rights reserved. Contact the repository owner for permission to reuse the original project material.
