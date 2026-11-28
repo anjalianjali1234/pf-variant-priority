@@ -1,13 +1,23 @@
 # pf-variant-priority
 
-**Prioritising variants of unknown significance in *Plasmodium falciparum* drug-resistance
-surveillance panels, using protein language models.**
+**Designing and testing antimalarial resistance surveillance panels for *Plasmodium
+falciparum*, on Indian parasites.**
 
-A reproducible Nextflow + Python workflow that takes targeted Nanopore amplicon data (or a
-pre-computed variant table), annotates protein-level variants across a 15-gene antimalarial
-resistance panel, scores every missense variant with a protein language model, calibrates
-those scores against WHO-validated *kelch13* markers, and emits a ranked watchlist of
-unvalidated variants circulating in a given set of samples.
+Two questions, two answers, both measured on open data and both reported here whichever
+way they came out.
+
+**1. Does a resistance-marker panel chosen on Indian parasites beat one chosen globally?**
+Yes, and the margin survives resampling. → [Result 1](#result-1-an-india-selected-panel-beats-a-globally-selected-one)
+
+**2. Can an unsupervised protein language model rank variants of unknown significance?**
+No. Scored against WHO-validated markers it is indistinguishable from chance, and that
+negative is kept on the front page rather than buried. → [Result 2](#result-2-constraint-scoring-does-not-recover-resistance-markers)
+
+The repository also holds the workflow those questions were asked with: a reproducible
+Nextflow + Python pipeline that takes targeted Nanopore amplicon data (or a pre-computed
+variant table), annotates protein-level variants across a 15-gene antimalarial resistance
+panel, scores missense variants, and calibrates any score against known markers before
+anyone acts on the ranking.
 
 ---
 
@@ -31,10 +41,52 @@ that layer is trustworthy.** It does not claim to predict resistance phenotype. 
 produces a reproducible ordering over VUS *and* measures, against known markers, whether
 the ordering carries any signal before anyone acts on it.
 
-On the first real run that calibration step returned a verdict of **no signal** for
-unsupervised constraint scoring (AUC 0.524, see Results below). That negative result is
-reported here in full, because a prioritisation tool that cannot say when it is not
-working is worse than no tool at all.
+Two strands of work came out of that. The first asks a narrower, answerable question —
+which markers belong in a panel aimed at Indian parasites — and gets a clear positive
+answer. The second asks whether a protein language model can rank the unknowns, and gets a
+clear negative. Both are below. A prioritisation tool that cannot say when it is not
+working is worse than no tool at all, so the negative stays on the front page.
+
+## Result 1: an India-selected panel beats a globally-selected one
+
+**Question.** Surveillance panels are assembled from markers validated on global data. If
+the markers that carry information in India are not the same ones, a panel inherited
+wholesale is spending reads on the wrong positions. Is it?
+
+**Data.** MalariaGEN Pf7, 300 Indian samples, scored against the project's drug-resistance
+marker genotypes and inferred-resistance classifications.
+
+**Answer.** At a panel size of seven markers, scored on Indian samples across 13 resistance
+classifications:
+
+| panel selected on | balanced accuracy |
+|---|---|
+| **Indian samples** | **0.9338** |
+| global samples | 0.8540 |
+
+Resampling the Indian samples 200 times gives a mean advantage of **+0.0410, 95% CI +0.0225
+to +0.0609**, with **100% of resamples favouring the India-selected panel**. Quote that
+bootstrap mean rather than the single-run gap of +0.0798, which is optimistic.
+
+**Why.** The informativeness of individual markers differs, and the differences are
+legible:
+
+| marker | entropy, India | entropy, global |
+|---|---|---|
+| dhfr_108 | 1.298 | 0.635 |
+| dhfr_59 | 1.306 | 0.822 |
+| dhps_613 | 0.000 | 0.414 |
+
+dhfr_108 carries about twice the entropy in India. dhps_613 is monomorphic across all 299
+Indian calls, so on these samples it separates nothing.
+
+**What this is not.** This is panel design — feature selection over MalariaGEN's
+rule-based resistance classifications. It is not phenotype prediction, because those
+classifications are rules applied to genotypes, not measured IC50 or survival assays.
+Monomorphic also does not mean droppable: surveillance exists to catch what arrives next,
+and a marker invariant today is the one you want to be watching when it changes.
+
+Full method, code and caveats: [`india-panel/`](india-panel/).
 
 ## Approach
 
@@ -134,7 +186,7 @@ single GPU in under an hour with the 650M checkpoint.
 
 ---
 
-## Result from the first real run (20 Nov 2026)
+## Result 2: constraint scoring does not recover resistance markers
 
 Scored every possible missense substitution across the kelch13 propeller domain
 (positions 350–726) with ESM-2 650M on a T4 GPU. Sequence retrieved from UniProt
@@ -220,6 +272,11 @@ pf-variant-priority/
 │   ├── pfmdr15_panel.tsv         panel gene list (VERIFY before use — see below)
 │   ├── who_validated_k13.tsv     WHO validated + candidate kelch13 markers
 │   └── example_variant_table.tsv synthetic smoke-test input
+├── india-panel/                  Result 1: India vs global panel selection on Pf7
+│   ├── india_panel.py            entropy, greedy selection, bootstrap
+│   ├── test_synthetic.py         selection recovers a planted answer
+│   ├── india_panel_colab.ipynb   the run, as executed
+│   └── README.md                 method, full results and caveats
 └── notebooks/01_walkthrough.ipynb
 ```
 
